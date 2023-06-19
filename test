@@ -1,0 +1,188 @@
+import json
+from typing import Any
+
+import requests
+import undetected_chromedriver as uc
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support.wait import WebDriverWait
+
+LOGIN_PAGE = "https://www1.royalbank.com/english/netaction/sgne.html"
+USERNAME_SELECTOR = "USERID"
+USERNAME_SAVED_SELECTOR = "newclientcard-dropdown"
+PASSWORD_SELECTOR = "PASSWORD"
+PROFILE_BUTTON = "profile-button"
+TRADE_URL = "https://www1.royalbank.com/sgw1/secureapp/N600/ReactUI/?LANGUAGE=ENGLISH#/Activity"
+SECURITY_QUESTION_CHECK_SELECTOR = "//label[@for='pvqQuestion']"
+SECURITY_QUESTION_SELECTOR = "//tr[@class='contentframework-altrow']"
+SECURITY_ANSWER_SELECTOR = "pvqAnswer"
+REMEMBER_ME_SELECTOR = "RMCCheck"
+REMEMBER_NEW_CARD_BUTTON_SELECTOR = "RememberNewCardCompleteID"
+username = ""
+password = ""
+
+
+def login() -> Any:
+    driver = uc.Chrome(version_main=114)
+
+    # Login with username/password and wait until the logout button is rendered
+    driver.get(LOGIN_PAGE)
+
+    WebDriverWait(driver, timeout=40).until(
+        lambda driver: driver.find_elements(By.ID, USERNAME_SELECTOR)
+        or driver.find_elements(By.CLASS_NAME, USERNAME_SAVED_SELECTOR)
+    )
+
+    driver.find_element(By.ID, USERNAME_SELECTOR).clear()
+    driver.find_element(By.ID, USERNAME_SELECTOR).send_keys(username)
+
+    driver.find_element(By.ID, PASSWORD_SELECTOR).send_keys(password)
+
+    if driver.find_elements(By.ID, REMEMBER_ME_SELECTOR):
+        driver.find_element(By.ID, REMEMBER_ME_SELECTOR).click()
+
+    driver.find_element(By.ID, PASSWORD_SELECTOR).send_keys(Keys.RETURN)
+
+    WebDriverWait(driver, 40).until(
+        lambda driver: driver.find_elements(By.ID, PROFILE_BUTTON)
+        or driver.find_elements(By.XPATH, SECURITY_QUESTION_CHECK_SELECTOR)
+    )
+
+    # If security answer is required, send security question back to the frontend
+    if driver.find_elements(By.XPATH, SECURITY_QUESTION_CHECK_SELECTOR):
+        security_question = driver.find_elements(By.XPATH, SECURITY_QUESTION_SELECTOR)[0].text.split(":")[1].strip()
+        print(security_question)
+        security_answer = input("Enter your answer")
+
+        driver.find_element(By.ID, SECURITY_ANSWER_SELECTOR).send_keys(security_answer)
+        driver.find_element(By.ID, SECURITY_ANSWER_SELECTOR).send_keys(Keys.RETURN)
+
+        try:
+            WebDriverWait(driver, 10).until(
+                lambda driver: driver.find_elements(By.ID, REMEMBER_NEW_CARD_BUTTON_SELECTOR)
+            )
+
+            driver.find_element(By.ID, REMEMBER_NEW_CARD_BUTTON_SELECTOR).click()
+        except:  # noqa: E722
+            pass
+
+    driver.get(TRADE_URL)
+
+    WebDriverWait(driver, 10).until(lambda driver: driver.find_elements(By.ID, PROFILE_BUTTON))
+
+    cookies = driver.get_cookies()
+    session = requests.Session()
+    for cookie in cookies:
+        session.cookies.set(cookie["name"], cookie["value"])
+
+    driver.quit()
+    return session.cookies
+
+
+cookies = login()
+
+query_params_token = {
+    "F22": "4WN600S",
+    "7ASERVER": "N601LD",
+    "LANGUAGE": "ENGLISH",
+    "7ASCRIPT": "/WebAPI/diapi/portfolioapi/v1/holdings",
+}
+params_positions = {"endDate": "2023-06-06T02:59:59.999Z", "startDate": "2023-03-05T04:00:00.000Z"}
+
+
+
+params_order_Status = {
+    "orderStatusFilter": "Executed",
+    "orderStatusFilter": "Expired",  # noqa
+    "orderStatusFilter": "OpenPending",  # noqa
+    "orderStatusFilter": "Rejected",  # noqa
+    "groupByOrderId": "true",  # noqa
+}
+
+headers_token = {
+    "accept": "application/json, text/plain, */*",
+    "accept-language": "en-GB,en-US;q=0.9,en;q=0.8",
+    "connection": "keep-alive",
+    "host": "www1.royalbank.com",
+    "referer": "https://www1.royalbank.com/cgi-bin/rbaccess/rbunxcgi?F22=4WN600S&7ASERVER=N601LD&LANGUAGE=ENGLISH&7ASCRIPT=/WebUI/Summary/Summary",
+    "sec-ch-ua": '"Google Chrome";v="113", "Chromium";v="113", "Not-A.Brand";v="24"',
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": '"Linux"',
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36",
+    "x-dtpc": "4$590000413_285h23vCUBPIICNKFMTBEAAWMHTOPPMCUTFTTAR-0e0",
+}
+headers_generic = {
+    "accept": "application/json, text/plain, */*",
+    "accept-language": "en-GB,en-US;q=0.9,en;q=0.8",
+    "connection": "keep-alive",
+    "host": "www1.royalbank.com",
+    "language": "en",
+    "locale": "English",
+    "referer": "https://www1.royalbank.com/sgw1/secureapp/N600/ReactUI/?LANGUAGE=ENGLISH",
+    "sec-ch-ua": '"Google Chrome";v="113", "Chromium";v="113", "Not-A.Brand";v="24"',
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": '"Linux"',
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36",
+}
+# Get token
+endpoint_token = "https://www1.royalbank.com/cgi-bin/rbaccess/rbunxcgi"
+response = requests.get(endpoint_token, headers=headers_token, params=query_params_token, cookies=cookies)
+data = response.content
+data = data.decode("ascii").strip().strip("\x00")  # type: ignore
+data = json.loads(data.rstrip("\x00"))  # type: ignore
+account_token = data["apiResponse"][0]["account"]["accountToken"]  # type: ignore
+
+# Account orders/activities
+endpoint_orders = "https://www1.royalbank.com/sgw1/secureapp/N600/Proxy/activityapi/v1/activities/groups/"
+endpoint_orders = endpoint_orders + account_token
+
+response = requests.get(endpoint_orders, headers=headers_generic, params=params_positions, cookies=cookies)
+data_orders_activities = response.content
+
+
+# Trades placed
+endpoint_trades = "https://www1.royalbank.com/sgw1/secureapp/N600/Proxy/portfolioapi/v1/tradecount/accounts/"
+endpoint_trades = endpoint_trades + account_token
+response = requests.get(endpoint_trades, headers=headers_generic, cookies=cookies)
+data_trades = response.content
+
+# Order Status
+endpoint_order = "https://www1.royalbank.com/sgw1/secureapp/N600/Proxy/orderstatusapi/v1/orderstatus/accounts/"
+endpoint_order = endpoint_order + account_token
+response = requests.get(endpoint_order, headers=headers_generic, params=params_order_Status, cookies=cookies)
+data_order_status = response.content
+
+# Symbol Search
+headers_symbol = {       
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br",
+        "accept-language": "en-GB,en-US;q=0.9,en;q=0.8",
+        "connection": "keep-alive",
+        "host": "wwwx3.royalbank.com",
+        "origin": "https://www1.royalbank.com",
+        "referer": "https://www1.royalbank.com/",
+        "sec-ch-ua": '"Not.A/Brand";v="8", "Chromium";v="114", "Google Chrome";v="114"',
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": '"Linux"',
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-site",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
+}
+
+params_symbol = {
+    "YYY340_SGMMDXcvSBRr ymvZVv e4ZBHTuKLxxAUJQ0pgBcle4BoSZm7R9IhIUXJkNtjg94fxd75TPr 9KMBCE4 h1PrckSv74rXdP62BmaNp8FT2s"
+    "term": "msf"
+}
+# endpoint_symbol = "https://wwwx3.royalbank.com/directinvesting/research/en-us/UniversalSearch/Search?YYY340_SGMMDXcvSBRr+ymvZVv+e4ZBHTuKLxxAUJQ0pgBcle4BoSZm7R9IhIUXJkNtjg94fxd75TPr+9KMBCE4+h1PrckSv74rXdP62BmaNp8FT2s=&term=msf"
+# response = requests.get(endpoint_symbol, headers=headers_symbol, cookies=cookies)
+breakpoint()
+
+endpoint_symbol = "https://wwwx3.royalbank.com/directinvesting/research/en-us/UniversalSearch/Search"
+response = requests.get(endpoint_symbol, headers=headers_symbol,params=params_symbol, cookies=cookies)
